@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import shutil
+import subprocess
 import pandas as pd
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -39,27 +40,27 @@ class GitHubMCPIssueMatcher:
         
         if domain == "Backend Engineering":
             return [
-                {"id": 101, "repo": "pallets/flask", "title": "Fix memory leak in asynchronous context local tearing lifecycle hooks", "labels": labels, "difficulty": complexity, "url": "https://github.com/pallets/flask/issues/101"},
-                {"id": 102, "repo": "tiangolo/fastapi", "title": "Implement automated validation type guards on heavily nested Pydantic payloads", "labels": labels, "difficulty": complexity, "url": "https://github.com/tiangolo/fastapi/issues/102"},
-                {"id": 103, "repo": "django/django", "title": "Refactor multi-statement connection pooling thread locks for high throughput", "labels": labels, "difficulty": complexity, "url": "https://github.com/django/django/issues/103"}
+                {"id": 101, "repo": "pallets/flask", "title": "Fix memory leak in asynchronous context local tearing lifecycle hooks", "labels": labels, "difficulty": complexity, "url": "https://github.com/pallets/flask/issues/101", "body": "Memory leak observed when using async context locals in long-running apps."},
+                {"id": 102, "repo": "tiangolo/fastapi", "title": "Implement automated validation type guards on heavily nested Pydantic payloads", "labels": labels, "difficulty": complexity, "url": "https://github.com/tiangolo/fastapi/issues/102", "body": "Nested payloads bypass validation in some edge cases."},
+                {"id": 103, "repo": "django/django", "title": "Refactor multi-statement connection pooling thread locks for high throughput", "labels": labels, "difficulty": complexity, "url": "https://github.com/django/django/issues/103", "body": "Connection pooling lock contention under heavy load."}
             ]
         elif domain == "Machine Learning Ops":
             return [
-                {"id": 201, "repo": "huggingface/transformers", "title": "Optimize Tensor loading precision mismatch anomalies during local pipeline execution", "labels": labels, "difficulty": complexity, "url": "https://github.com/huggingface/transformers/issues/201"},
-                {"id": 202, "repo": "pytorch/pytorch", "title": "Implement accelerated similarity matrix vector dot-product kernels on Windows architectures", "labels": labels, "difficulty": complexity, "url": "https://github.com/pytorch/pytorch/issues/202"},
-                {"id": 203, "repo": "meta-llama/llama", "title": "Fix token serialization tracking bugs within localized embeddings generation maps", "labels": labels, "difficulty": complexity, "url": "https://github.com/meta-llama/llama/issues/203"}
+                {"id": 201, "repo": "huggingface/transformers", "title": "Optimize Tensor loading precision mismatch anomalies during local pipeline execution", "labels": labels, "difficulty": complexity, "url": "https://github.com/huggingface/transformers/issues/201", "body": "Precision mismatch when loading tensors from saved checkpoints."},
+                {"id": 202, "repo": "pytorch/pytorch", "title": "Implement accelerated similarity matrix vector dot-product kernels on Windows architectures", "labels": labels, "difficulty": complexity, "url": "https://github.com/pytorch/pytorch/issues/202", "body": "Performance regression on Windows for large-batch operations."},
+                {"id": 203, "repo": "meta-llama/llama", "title": "Fix token serialization tracking bugs within localized embeddings generation maps", "labels": labels, "difficulty": complexity, "url": "https://github.com/meta-llama/llama/issues/203", "body": "Embeddings serialization loses token ordering in some cases."}
             ]
         elif domain == "Frontend Architecture":
             return [
-                {"id": 301, "repo": "facebook/react", "title": "Resolve layout reflow stutter delays inside dynamic server-rendered UI card metrics", "labels": labels, "difficulty": complexity, "url": "https://github.com/facebook/react/issues/301"},
-                {"id": 302, "repo": "vercel/next.js", "title": "Fix interactive data dashboard route parameter parsing edge cases", "labels": labels, "difficulty": complexity, "url": "https://github.com/vercel/next.js/issues/302"},
-                {"id": 303, "repo": "streamlit/streamlit", "title": "Add customizable global component theme wrappers for enterprise analytical displays", "labels": labels, "difficulty": complexity, "url": "https://github.com/streamlit/streamlit/issues/303"}
+                {"id": 301, "repo": "facebook/react", "title": "Resolve layout reflow stutter delays inside dynamic server-rendered UI card metrics", "labels": labels, "difficulty": complexity, "url": "https://github.com/facebook/react/issues/301", "body": "Reflow causes jank when many cards are updated at once."},
+                {"id": 302, "repo": "vercel/next.js", "title": "Fix interactive data dashboard route parameter parsing edge cases", "labels": labels, "difficulty": complexity, "url": "https://github.com/vercel/next.js/issues/302", "body": "Route param parsing fails for encoded characters."},
+                {"id": 303, "repo": "streamlit/streamlit", "title": "Add customizable global component theme wrappers for enterprise analytical displays", "labels": labels, "difficulty": complexity, "url": "https://github.com/streamlit/streamlit/issues/303", "body": "Allow global theme wrappers for Streamlit Components."}
             ]
         else:
             return [
-                {"id": 401, "repo": "kubernetes/kubernetes", "title": "Fix localized container runtime secret decryption pipeline bottlenecks", "labels": labels, "difficulty": complexity, "url": "https://github.com/kubernetes/kubernetes/issues/401"},
-                {"id": 402, "repo": "hashicorp/terraform", "title": "Refactor automated deployment state locks validation engine wrapper", "labels": labels, "difficulty": complexity, "url": "https://github.com/hashicorp/terraform/issues/402"},
-                {"id": 403, "repo": "docker/cli", "title": "Implement defensive type guards guarding system context environment loads", "labels": labels, "difficulty": complexity, "url": "https://github.com/docker/cli/issues/403"}
+                {"id": 401, "repo": "kubernetes/kubernetes", "title": "Fix localized container runtime secret decryption pipeline bottlenecks", "labels": labels, "difficulty": complexity, "url": "https://github.com/kubernetes/kubernetes/issues/401", "body": "Secret decryption step slows down pod startup."},
+                {"id": 402, "repo": "hashicorp/terraform", "title": "Refactor automated deployment state locks validation engine wrapper", "labels": labels, "difficulty": complexity, "url": "https://github.com/hashicorp/terraform/issues/402", "body": "State lock validation can deadlock on retries."},
+                {"id": 403, "repo": "docker/cli", "title": "Implement defensive type guards guarding system context environment loads", "labels": labels, "difficulty": complexity, "url": "https://github.com/docker/cli/issues/403", "body": "Environment loads may raise unexpected exceptions on malformed configs."}
             ]
 
     async def fetch_live_issues(self, owner: str, repo: str, max_issues: int = 20) -> list:
@@ -92,7 +93,11 @@ class GitHubMCPIssueMatcher:
                 }
             }
             process.stdin.write(json.dumps(init_req).encode('utf-8') + b'\n')
-            await process.stdin.drain()
+            try:
+                await process.stdin.drain()
+            except Exception:
+                # Some asyncio subprocess stdin objects don't expose drain(); ignore if not available
+                pass
             await asyncio.sleep(1.0)
             
             tool_call = {
@@ -103,7 +108,10 @@ class GitHubMCPIssueMatcher:
                 }
             }
             process.stdin.write(json.dumps(tool_call).encode('utf-8') + b'\n')
-            await process.stdin.drain()
+            try:
+                await process.stdin.drain()
+            except Exception:
+                pass
             
             try:
                 resp_bytes = await asyncio.wait_for(process.stdout.readline(), timeout=3.0)
@@ -126,13 +134,15 @@ class GitHubMCPIssueMatcher:
             formatted_issues = []
             for issue in raw_issues:
                 labels = ", ".join([l.get("name", "") for l in issue.get("labels", []) if isinstance(l, dict)])
+                body = issue.get("body", "") or ""
                 formatted_issues.append({
                     "id": issue.get("number"),
                     "repo": f"{owner}/{repo}",
                     "title": issue.get("title", ""),
                     "labels": labels if labels else "None",
                     "difficulty": "Assigned via Live Stream Labels",
-                    "url": issue.get("html_url", "")
+                    "url": issue.get("html_url", ""),
+                    "body": body
                 })
             return formatted_issues
             
@@ -158,7 +168,8 @@ class GitHubMCPIssueMatcher:
                             "title": issue.get("title", ""),
                             "labels": labels if labels else "None",
                             "difficulty": "Assigned via REST API Labels",
-                            "url": issue.get("html_url", "")
+                            "url": issue.get("html_url", ""),
+                            "body": issue.get("body", "") or ""
                         })
                     self.last_source = "GitHub REST fallback"
                     return formatted_issues
@@ -172,7 +183,12 @@ class GitHubMCPIssueMatcher:
             
         df = pd.DataFrame(issues)
         skill_embedding = self.model.encode([developer_skills])[0]
-        issue_texts = (df["title"] + " " + df["labels"]).tolist()
+
+        titles = df["title"].fillna("")
+        labels = df["labels"].fillna("")
+        bodies = df["body"].fillna("") if "body" in df.columns else pd.Series([""] * len(df))
+        issue_texts = (titles + " " + labels + " " + bodies).tolist()
+
         issue_embeddings = self.model.encode(issue_texts)
         
         similarities = []
