@@ -20,8 +20,10 @@ st.set_page_config(page_title="GitMatch.AI Dashboard", layout="wide")
 def get_matcher() -> GitHubMCPIssueMatcher:
     return GitHubMCPIssueMatcher()
 
+
 def run_async(coro):
     return asyncio.run(coro)
+
 
 def normalize_repo_input(owner: str, repo: str) -> tuple[str, str]:
     owner = owner.strip().strip("/")
@@ -108,6 +110,13 @@ if trigger_matching:
         if not raw_issues:
             raw_issues = matcher._generate_dynamic_fallback_issues(domain_focus, experience_level)
 
+        # Filter issues by the selected experience level using labels/difficulty inference
+        filtered_issues = matcher.filter_issues_by_experience(raw_issues, experience_level)
+        if not filtered_issues:
+            st.warning(f"No issues matched the difficulty '{experience_level}'. Showing unfiltered results.")
+            filtered_issues = raw_issues
+        raw_issues = filtered_issues
+
         ranked_df = matcher.compute_semantic_matches(developer_skills, raw_issues, experience_level)
 
     if ranked_df.empty:
@@ -150,6 +159,10 @@ if trigger_matching:
                     st.markdown(f"**Title:** {row['title']}")
                     st.markdown(f"**Difficulty:** `{row['difficulty']}`")
                     st.markdown(f"**Labels:** `{row['labels']}`")
+                    # show a short excerpt of the body to help judge suitability
+                    if 'body' in row and row['body']:
+                        excerpt = (row['body'][:300] + '...') if len(row['body']) > 300 else row['body']
+                        st.markdown(f"**Excerpt:** {excerpt}")
                 with col_b:
                     st.markdown(f"#### {score_pct:.1f}%")
                     st.link_button("View", row["url"])
